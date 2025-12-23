@@ -222,6 +222,23 @@ namespace FusionComms.Services.WhatsApp.Restaurants
                 session.DeliveryMethod = "Delivery";
             }
 
+            // If flow has provided delivery data, skip to notes or confirmation
+            if (session.DeliveryMethod == "Delivery" && !string.IsNullOrEmpty(session.DeliveryAddress) && !string.IsNullOrEmpty(session.DeliveryContactPhone))
+            {
+                var currentCart = _cartManager.DeserializeCart(session.CartData);
+                if (!string.IsNullOrEmpty(session.Notes))
+                {
+                    session.CurrentState = "ORDER_CONFIRMATION";
+                    await _uiManager.ShowOrderSummary(session, currentCart);
+                }
+                else
+                {
+                    session.CurrentState = "COLLECT_NOTES";
+                    await SendSpecialInstructionsPrompt(session);
+                }
+                return;
+            }
+
             if (string.IsNullOrEmpty(session.DeliveryMethod))
             {
                 session.CurrentState = "DELIVERY_METHOD";

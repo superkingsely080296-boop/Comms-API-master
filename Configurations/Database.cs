@@ -8,6 +8,6 @@ namespace FusionComms.Configurations
     {
         public static IServiceCollection ConfigureDbContext(this IServiceCollection services, string connectionString) =>
             services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(connectionString));
+            options.UseSqlite(connectionString));
     }
 }

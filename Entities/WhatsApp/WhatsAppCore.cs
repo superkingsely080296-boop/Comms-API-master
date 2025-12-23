@@ -40,6 +40,7 @@ namespace FusionComms.Entities.WhatsApp
         public BusinessType BusinessType { get; set; } = BusinessType.Restaurant;
         [MaxLength(50)] public string BotName { get; set; } = "Dyfin";
         public string EmbedlyAccountId { get; set; }
+        public string DeliveryFlowJson { get; set; } // Added for WhatsApp Flow integration
     }
 
     public class WhatsAppMedia

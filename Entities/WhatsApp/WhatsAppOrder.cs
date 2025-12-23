@@ -24,6 +24,7 @@ namespace FusionComms.Entities.WhatsApp
         public bool IsEditing { get; set; }
         public string DeliveryMethod { get; set; }
         public string DeliveryAddress { get; set; }
+        public string DeliveryContactPhone { get; set; }
         public string DeliveryChargeId { get; set; }
         public string EditGroupsData { get; set; }
         public string EditingGroupId { get; set; }

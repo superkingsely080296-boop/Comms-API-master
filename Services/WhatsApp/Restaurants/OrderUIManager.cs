@@ -1406,6 +1406,24 @@ namespace FusionComms.Services.WhatsApp.Restaurants
                 });
             }
 
+            // Check if delivery flow is configured
+            if (!string.IsNullOrEmpty(business.DeliveryFlowJson))
+            {
+                // Send the WhatsApp Flow instead of interactive list
+                var flowResponse = await _messagingService.SendDeliveryFlowAsync(
+                    session.BusinessId,
+                    session.PhoneNumber,
+                    business.DeliveryFlowJson);
+
+                if (flowResponse.Success)
+                {
+                    session.CurrentState = "FLOW_IN_PROGRESS";
+                    await _sessionManager.UpdateSession(session);
+                    return;
+                }
+                // If flow fails, fall back to interactive list
+            }
+
             await _messagingService.SendInteractiveListAsync(
                 session.BusinessId,
                 session.PhoneNumber,

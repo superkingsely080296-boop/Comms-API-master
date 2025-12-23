@@ -1,3 +1,4 @@
+using FusionComms.Data;
 using FusionComms.DTOs.WhatsApp;
 using FusionComms.Services.WhatsApp;
 using FusionComms.Services.WhatsApp.Restaurants;
@@ -17,12 +18,14 @@ namespace FusionComms.Controllers.WhatsApp
         private readonly WhatsAppMessagingService _messagingService;
         private readonly WhatsAppCatalogService _catalogService;
         private readonly WhatsAppOnboardingService _onboardingService;
+        private readonly AppDbContext _db;
 
-        public WhatsAppController(WhatsAppMessagingService messagingService, WhatsAppCatalogService catalogService, WhatsAppOnboardingService onboardingService)
+        public WhatsAppController(WhatsAppMessagingService messagingService, WhatsAppCatalogService catalogService, WhatsAppOnboardingService onboardingService, AppDbContext db)
         {
             _messagingService = messagingService;
             _catalogService = catalogService;
             _onboardingService = onboardingService;
+            _db = db;
         }
 
         [HttpPost("send")]
@@ -188,5 +191,46 @@ namespace FusionComms.Controllers.WhatsApp
                 ? NotFound(new { success = false, message = $"No business found for restaurant ID: {restaurantId}" })
                 : Ok(new { success = true, businessId = business.BusinessId });
         }
+
+        [HttpGet("flow")]
+        public async Task<IActionResult> GetDeliveryFlow(
+            [FromRoute] string businessId)
+        {
+            var business = await _db.WhatsAppBusinesses.FindAsync(businessId);
+            if (business == null)
+            {
+                return NotFound(new { success = false, message = "Business not found" });
+            }
+
+            return Ok(new { success = true, flowJson = business.DeliveryFlowJson });
+        }
+
+        [HttpPost("flow")]
+        public async Task<IActionResult> SaveDeliveryFlow(
+            [FromRoute] string businessId,
+            [FromBody] SaveFlowRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.FlowJson))
+            {
+                return BadRequest(new { success = false, message = "FlowJson is required" });
+            }
+
+            var business = await _db.WhatsAppBusinesses.FindAsync(businessId);
+            if (business == null)
+            {
+                return NotFound(new { success = false, message = "Business not found" });
+            }
+
+            business.DeliveryFlowJson = request.FlowJson;
+            _db.WhatsAppBusinesses.Update(business);
+            await _db.SaveChangesAsync();
+
+            return Ok(new { success = true, message = "Flow saved successfully" });
+        }
+    }
+
+    public class SaveFlowRequest
+    {
+        public string FlowJson { get; set; }
     }
 }

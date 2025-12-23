@@ -240,6 +240,10 @@ namespace FusionComms.Services.WhatsApp
                     await OnOrderReceived(messageEvent);
                     break;
                     
+                case WhatsAppEventType.FlowSubmitted:
+                    await OnFlowSubmitted(messageEvent);
+                    break;
+                    
                 case WhatsAppEventType.Unknown:
                     await OnUnknownMessageType(messageEvent);
                     break;
@@ -255,6 +259,7 @@ namespace FusionComms.Services.WhatsApp
         protected virtual Task OnAudioReceived(WhatsAppMessageEvent messageEvent) => Task.CompletedTask;
         protected virtual Task OnStickerReceived(WhatsAppMessageEvent messageEvent) => Task.CompletedTask;
         protected virtual Task OnOrderReceived(WhatsAppMessageEvent messageEvent) => Task.CompletedTask;
+        protected virtual Task OnFlowSubmitted(WhatsAppMessageEvent messageEvent) => Task.CompletedTask;
         protected virtual Task OnUnknownMessageType(WhatsAppMessageEvent messageEvent) => Task.CompletedTask;
 
         private async Task ProcessTemplateStatus(JObject payload, string businessId)

@@ -14,6 +14,7 @@ namespace FusionComms.DTOs.WhatsApp
         Audio,
         Sticker,
         Order,
+        FlowSubmitted,
         Unknown
     }
 
