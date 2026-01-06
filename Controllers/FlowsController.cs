@@ -37,7 +37,17 @@ namespace FusionComms.Controllers
         [HttpPost("endpoint")]
         public async Task<IActionResult> PostEndpoint([FromBody] FlowEncryptedRequest req)
         {
-            _logger.LogInformation("🚀 FLOW HIT");
+            _logger.LogInformation("🚀 FLOW HIT {Path} {Method} from {Remote}",
+                Request?.Path, Request?.Method,
+                Request?.Headers.ContainsKey("X-Forwarded-For") == true ? Request.Headers["X-Forwarded-For"].ToString() : HttpContext?.Connection?.RemoteIpAddress?.ToString());
+
+            _logger.LogDebug("Request headers: Host={Host}, Content-Length={Length}",
+                Request?.Headers["Host"].ToString(), Request?.ContentLength);
+
+            _logger.LogDebug("Encrypted payload sizes: data={DataLen}, key={KeyLen}, iv={IvLen}",
+                req?.encrypted_flow_data?.Length ?? 0,
+                req?.encrypted_aes_key?.Length ?? 0,
+                req?.initial_vector?.Length ?? 0);
 
             try
             {
@@ -47,15 +57,18 @@ namespace FusionComms.Controllers
                 rsa.ImportFromPem(privatePem);
 
                 var decryptedJson = DecryptFlowRequest(req, rsa, out var aesKey, out var iv);
-                _logger.LogInformation("🔓 Decrypted Payload");
+                _logger.LogInformation("🔓 Decrypted payload succeeded (len={Len})", decryptedJson?.Length ?? 0);
+                _logger.LogDebug("Decrypted payload content: {Decrypted}", decryptedJson);
 
                 var client = _httpClientFactory.CreateClient();
+                _logger.LogInformation("Calling external areas API: {Url}", "https://cjendpoint.onrender.com/api/areas");
                 var apiResponse = await client.GetAsync("https://cjendpoint.onrender.com/api/areas");
 
                 if (!apiResponse.IsSuccessStatusCode)
                     throw new Exception("Failed to fetch delivery areas");
 
                 var rawAreas = await apiResponse.Content.ReadFromJsonAsync<List<ExternalArea>>();
+                _logger.LogInformation("External API responded {Status} and returned {Count} areas", apiResponse.StatusCode, rawAreas?.Count ?? 0);
 
                 var deliveryAreas = new List<object>();
                 if (rawAreas != null)
