@@ -129,15 +129,54 @@ namespace FusionComms.Controllers
 
         private static string GetPrivateKeyPem(IConfiguration config)
         {
+            // Try direct PEM env var
             var pem = config["PRIVATE_KEY_PEM"] ?? Environment.GetEnvironmentVariable("PRIVATE_KEY_PEM");
-            if (!string.IsNullOrWhiteSpace(pem))
+
+            // If pem looks like it's just the BEGIN line (common when .env parsing is naive),
+            // or if it's a short single-line value, try the base64 alternative.
+            if (string.IsNullOrWhiteSpace(pem) || !pem.Contains("-----BEGIN") || !pem.Contains("-----END"))
+            {
+                // Try base64 encoded pem
+                var pemB64 = config["PRIVATE_KEY_PEM_B64"] ?? Environment.GetEnvironmentVariable("PRIVATE_KEY_PEM_B64");
+                if (!string.IsNullOrWhiteSpace(pemB64))
+                {
+                    try
+                    {
+                        var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(pemB64));
+                        if (!string.IsNullOrWhiteSpace(decoded))
+                            pem = decoded;
+                    }
+                    catch
+                    {
+                        // ignore decode errors and fall through to other options
+                    }
+                }
+            }
+
+            // If pem still doesn't look valid, check if the env value is itself base64
+            if (!string.IsNullOrWhiteSpace(pem) && (!pem.Contains("-----BEGIN") || !pem.Contains("-----END")))
+            {
+                try
+                {
+                    var maybe = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(pem));
+                    if (maybe.Contains("-----BEGIN") && maybe.Contains("-----END"))
+                        pem = maybe;
+                }
+                catch
+                {
+                    // not base64, continue
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(pem) && pem.Contains("-----BEGIN") && pem.Contains("-----END"))
                 return pem;
 
+            // Fall back to path
             var path = config["PRIVATE_KEY_PATH"] ?? Environment.GetEnvironmentVariable("PRIVATE_KEY_PATH");
             if (!string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
                 return System.IO.File.ReadAllText(path);
 
-            throw new InvalidOperationException("PRIVATE_KEY_PEM or PRIVATE_KEY_PATH must be set");
+            throw new InvalidOperationException("PRIVATE_KEY_PEM (raw or base64) or PRIVATE_KEY_PATH must be set and contain a valid PEM-encoded private key");
         }
 
         private static string DecryptFlowRequest(FlowEncryptedRequest req, RSA rsa, out byte[] aesKey, out byte[] requestIv)
