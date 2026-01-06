@@ -25,6 +25,7 @@
     <PackageReference Include="Serilog.Sinks.Seq" Version="9.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
     <PackageReference Include="TimeZoneConverter" Version="7.0.0" />
+    <PackageReference Include="Portable.BouncyCastle" Version="1.9.0" />
   </ItemGroup>
 
 </Project>

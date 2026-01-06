@@ -398,6 +398,14 @@ ASALocalRun/
 # NVidia Nsight GPU debugger configuration file
 *.nvuser
 
+# Local environment file (do not commit secrets)
+.env
+
+# Local private keys (ignore actual keys and secret folders)
+private_key.pem
+private_key.pem.example
+secrets/
+
 # MFractors (Xamarin productivity tool) working folder
 .mfractor/
 
