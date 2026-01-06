@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -60,35 +61,64 @@ namespace FusionComms.Controllers
                 _logger.LogInformation("🔓 Decrypted payload succeeded (len={Len})", decryptedJson?.Length ?? 0);
                 _logger.LogDebug("Decrypted payload content: {Decrypted}", decryptedJson);
 
-                var client = _httpClientFactory.CreateClient();
-                _logger.LogInformation("Calling external areas API: {Url}", "https://cjendpoint.onrender.com/api/areas");
-                var apiResponse = await client.GetAsync("https://cjendpoint.onrender.com/api/areas");
-
-                if (!apiResponse.IsSuccessStatusCode)
-                    throw new Exception("Failed to fetch delivery areas");
-
-                var rawAreas = await apiResponse.Content.ReadFromJsonAsync<List<ExternalArea>>();
-                _logger.LogInformation("External API responded {Status} and returned {Count} areas", apiResponse.StatusCode, rawAreas?.Count ?? 0);
-
-                var deliveryAreas = new List<object>();
-                if (rawAreas != null)
+                // parse action from decrypted payload
+                string action = null;
+                try
                 {
-                    foreach (var a in rawAreas)
-                    {
-                        deliveryAreas.Add(new { id = a.id, title = a.title });
-                    }
+                    using var doc = JsonDocument.Parse(decryptedJson ?? "{}");
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("action", out var aProp))
+                        action = aProp.GetString();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse decrypted payload JSON");
                 }
 
-                var response = new
+                object response;
+                if (string.Equals(action, "INIT", StringComparison.OrdinalIgnoreCase))
                 {
-                    version = "3.0",
-                    screen = "screen_asnlyt",
-                    data = new
+                    var client = _httpClientFactory.CreateClient();
+
+                    var apiUrl = "https://api.food-ease.io/api/v1/OrderCharge/whatsapp-list-charges?restaurantId=d91e02ba-50f3-4cd6-8607-8ffbbeeda2da&revCenterId=f97e82e5-c922-4f9c-bc9a-477641d72d11&sourceId=e059a93c-5423-4d07-a7df-8e48b38c428b&serviceType=Delivery&api-version=v1";
+                    _logger.LogInformation("Calling external areas API: {Url}", apiUrl);
+
+                    var apiResponse = await client.GetAsync(apiUrl);
+                    if (!apiResponse.IsSuccessStatusCode)
+                        throw new Exception("Failed to fetch delivery areas");
+
+                    var rawApiResponse = await apiResponse.Content.ReadFromJsonAsync<ExternalApiResponse>();
+
+                    var deliveryAreas = rawApiResponse?.data?.data?
+                        .Where(x => x.chargeServices != null && x.chargeServices.Count > 0)
+                        .Select(x => (object)new { id = x.chargeServices[0].orderCharge, title = x.chargeServices[0].orderCharge })
+                        .ToList() ?? new List<object>();
+
+                    response = new
                     {
-                        delivery_areas = deliveryAreas,
-                        status = "active"
-                    }
-                };
+                        version = "3.0",
+                        screen = "screen_asnlyt",
+                        data = new
+                        {
+                            delivery_areas = deliveryAreas,
+                            status = "active"
+                        }
+                    };
+                }
+                else
+                {
+                    // fallback to previous behaviour: empty delivery areas
+                    var deliveryAreas = new List<object>();
+                    response = new
+                    {
+                        version = "3.0",
+                        screen = "screen_asnlyt",
+                        data = new
+                        {
+                            delivery_areas = deliveryAreas,
+                            status = "active"
+                        }
+                    };
+                }
 
                 var flowJson = JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true });
                 _logger.LogDebug("📦 FLOW JSON SENT TO WHATSAPP (before encryption): {flowJson}", flowJson);
@@ -116,6 +146,29 @@ namespace FusionComms.Controllers
         {
             public string id { get; set; } = string.Empty;
             public string title { get; set; } = string.Empty;
+        }
+
+        // DTOs for external API
+        public class ExternalApiResponse
+        {
+            public DataContainer data { get; set; } = new DataContainer();
+        }
+
+        public class DataContainer
+        {
+            public List<ChargeItem> data { get; set; } = new List<ChargeItem>();
+        }
+
+        public class ChargeItem
+        {
+            public string id { get; set; } = "";
+            public string title { get; set; } = "";
+            public List<ChargeService> chargeServices { get; set; } = new List<ChargeService>();
+        }
+
+        public class ChargeService
+        {
+            public string orderCharge { get; set; } = "";
         }
 
         // Crypto helpers
