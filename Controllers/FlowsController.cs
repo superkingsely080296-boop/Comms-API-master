@@ -135,22 +135,44 @@ namespace FusionComms.Controllers
                         _logger.LogWarning(ex, "Failed to deserialize delivery fee response JSON; raw body: {Body}", respText);
                     }
 
-                    var totalAmount = feeResponse?.data?.total_amount ?? 0L;
-                    // Convert integer amount (assumed to be in cents) to decimal with two fraction digits
-                    var deliveryPriceDecimal = totalAmount / 100m;
-                    _logger.LogInformation("💰 Delivery fee resolved: {Amount} ({Formatted})", totalAmount, deliveryPriceDecimal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-
-                    response = new
+                    // If the API did not provide a valid data.total_amount, do NOT default to zero.
+                    // Instead show a 'fail to fetch' delivery price and offer an opt-out option.
+                    if (feeResponse == null || feeResponse.data == null)
                     {
-                        version = "3.0",
-                        screen = "screen_igvcep",
-                        data = new
+                        _logger.LogError("❌ Delivery fee not available — failing out. Raw body: {Body}", respText);
+
+                        response = new
                         {
-                            passed_address = address,
-                            passed_phone = phone,
-                            delivery_price = deliveryPriceDecimal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
-                        }
-                    };
+                            version = "3.0",
+                            screen = "screen_igvcep",
+                            data = new
+                            {
+                                passed_address = address,
+                                passed_phone = phone,
+                                delivery_price = "fail to fetch",
+                                can_opt_out = true
+                            }
+                        };
+                    }
+                    else
+                    {
+                        var totalAmount = feeResponse.data.total_amount;
+                        // Convert integer amount (assumed to be in cents) to decimal with two fraction digits
+                        var deliveryPriceDecimal = totalAmount / 100m;
+                        _logger.LogInformation("💰 Delivery fee resolved: {Amount} ({Formatted})", totalAmount, deliveryPriceDecimal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+
+                        response = new
+                        {
+                            version = "3.0",
+                            screen = "screen_igvcep",
+                            data = new
+                            {
+                                passed_address = address,
+                                passed_phone = phone,
+                                delivery_price = deliveryPriceDecimal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                            }
+                        };
+                    }
                 }
                 else
                 {
