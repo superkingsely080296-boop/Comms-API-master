@@ -109,17 +109,33 @@ namespace FusionComms.Controllers
                         estimated_order_amount = 0
                     };
 
-                    var httpResponse = await client.PostAsJsonAsync("https://api.food-ease.io/api/v1/Chowdeck/get-delivery-fee", feeRequest);
+                    var feeUrl = "https://api.food-ease.io/api/v1/Chowdeck/get-delivery-fee";
+                    var feeReqJson = JsonSerializer.Serialize(feeRequest);
+                    _logger.LogInformation("➡️ POST {Url} with body: {Body}", feeUrl, feeReqJson);
+
+                    var content = new StringContent(feeReqJson, Encoding.UTF8, "application/json");
+                    var httpResponse = await client.PostAsync(feeUrl, content);
+
+                    var respText = await httpResponse.Content.ReadAsStringAsync();
+                    _logger.LogInformation("⬅️ Delivery fee API response: {Status} {Body}", (int)httpResponse.StatusCode, respText);
 
                     if (!httpResponse.IsSuccessStatusCode)
                     {
-                        _logger.LogError("❌ Delivery fee API failed: {Status}", httpResponse.StatusCode);
-                        throw new Exception("Delivery fee API call failed");
+                        _logger.LogError("❌ Delivery fee API failed (status: {Status}). Body: {Body}", (int)httpResponse.StatusCode, respText);
+                        throw new Exception("Delivery fee API call failed: " + respText);
                     }
 
-                    var feeResponse = await httpResponse.Content.ReadFromJsonAsync<DeliveryFeeResponse>();
-                    var totalAmount = feeResponse?.data?.total_amount ?? 0L;
+                    DeliveryFeeResponse feeResponse = null;
+                    try
+                    {
+                        feeResponse = JsonSerializer.Deserialize<DeliveryFeeResponse>(respText);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to deserialize delivery fee response JSON; raw body: {Body}", respText);
+                    }
 
+                    var totalAmount = feeResponse?.data?.total_amount ?? 0L;
                     _logger.LogInformation("💰 Delivery fee resolved: {Amount}", totalAmount);
 
                     response = new
