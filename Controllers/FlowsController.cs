@@ -129,12 +129,15 @@ namespace FusionComms.Controllers
                 }
                 else
                 {
-                    // default: load the address entry screen (screen 1)
+                    // default: load the address entry screen (screen 1) with active status
                     response = new
                     {
                         version = "3.0",
                         screen = "screen_asnlyt",
-                        data = new { }
+                        data = new
+                        {
+                            status = "active"
+                        }
                     };
                 }
 
