@@ -89,7 +89,7 @@ namespace FusionComms.Controllers
                     dataElement = tmpData;
 
                 var hasAddress = dataElement.ValueKind == JsonValueKind.Object && dataElement.TryGetProperty("passed_address", out _);
-                if (string.Equals(action, "navigate", StringComparison.OrdinalIgnoreCase) && (string.Equals(screen, "screen_igvcep", StringComparison.OrdinalIgnoreCase) || hasAddress))
+                if (string.Equals(action, "data_exchange", StringComparison.OrdinalIgnoreCase) && (string.Equals(screen, "screen_igvcep", StringComparison.OrdinalIgnoreCase) || hasAddress))
                 {
                     // extract user-entered address and phone from the payload (if present)
                     var data = dataElement.ValueKind == JsonValueKind.Object ? dataElement : new JsonElement();
@@ -136,7 +136,9 @@ namespace FusionComms.Controllers
                     }
 
                     var totalAmount = feeResponse?.data?.total_amount ?? 0L;
-                    _logger.LogInformation("💰 Delivery fee resolved: {Amount}", totalAmount);
+                    // Convert integer amount (assumed to be in cents) to decimal with two fraction digits
+                    var deliveryPriceDecimal = totalAmount / 100m;
+                    _logger.LogInformation("💰 Delivery fee resolved: {Amount} ({Formatted})", totalAmount, deliveryPriceDecimal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
 
                     response = new
                     {
@@ -146,7 +148,7 @@ namespace FusionComms.Controllers
                         {
                             passed_address = address,
                             passed_phone = phone,
-                            delivery_price = totalAmount.ToString()
+                            delivery_price = deliveryPriceDecimal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                         }
                     };
                 }
