@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -75,48 +76,65 @@ namespace FusionComms.Controllers
                 }
 
                 object response;
-                if (string.Equals(action, "INIT", StringComparison.OrdinalIgnoreCase))
+
+                using var doc2 = JsonDocument.Parse(decryptedJson ?? "{}");
+                var screen = doc2.RootElement.ValueKind == JsonValueKind.Object && doc2.RootElement.TryGetProperty("screen", out var sProp) ? sProp.GetString() : null;
+
+                _logger.LogInformation("➡️ Flow action: {Action}, screen: {Screen}", action, screen);
+
+                if (string.Equals(action, "navigate", StringComparison.OrdinalIgnoreCase) && string.Equals(screen, "screen_igvcep", StringComparison.OrdinalIgnoreCase))
                 {
+                    // extract user-entered address and phone from the payload
+                    var data = doc2.RootElement.GetProperty("data");
+                    var address = data.TryGetProperty("passed_address", out var a) ? a.GetString() ?? string.Empty : string.Empty;
+                    var phone = data.TryGetProperty("passed_phone", out var p) ? p.GetString() ?? string.Empty : string.Empty;
+
+                    _logger.LogInformation("📍 Calculating delivery fee for address: {Address}", address);
+
                     var client = _httpClientFactory.CreateClient();
+                    // Demo bearer token provided by user (remove or move to configuration in production)
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiI0MTZhYjA2My04ZmViLTQ0MmItYWM1Zi0zYTM0ZjA1NThmMzciLCJuYW1lIjoiU2V5aWZ1bm1pIE9sYWZpb3llIiwicm9sZSI6Ik1hbmFnZXIiLCJ1c2VyTmFtZSI6I");
 
-                    var apiUrl = "https://api.food-ease.io/api/v1/OrderCharge/whatsapp-list-charges?restaurantId=d91e02ba-50f3-4cd6-8607-8ffbbeeda2da&revCenterId=f97e82e5-c922-4f9c-bc9a-477641d72d11&sourceId=e059a93c-5423-4d07-a7df-8e48b38c428b&serviceType=Delivery&api-version=v1";
-                    _logger.LogInformation("Calling external areas API: {Url}", apiUrl);
+                    var feeRequest = new DeliveryFeeRequest
+                    {
+                        source_address_string = "Panarotics",
+                        destination_address_string = address ?? string.Empty,
+                        estimated_order_amount = 0
+                    };
 
-                    var apiResponse = await client.GetAsync(apiUrl);
-                    if (!apiResponse.IsSuccessStatusCode)
-                        throw new Exception("Failed to fetch delivery areas");
+                    var httpResponse = await client.PostAsJsonAsync("https://api.food-ease.io/api/v1/Chowdeck/get-delivery-fee", feeRequest);
 
-                    var rawApiResponse = await apiResponse.Content.ReadFromJsonAsync<ExternalApiResponse>();
+                    if (!httpResponse.IsSuccessStatusCode)
+                    {
+                        _logger.LogError("❌ Delivery fee API failed: {Status}", httpResponse.StatusCode);
+                        throw new Exception("Delivery fee API call failed");
+                    }
 
-                    var deliveryAreas = rawApiResponse?.data?.data?
-                        .Where(x => x.chargeServices != null && x.chargeServices.Count > 0)
-                        .Select(x => (object)new { id = x.chargeServices[0].orderCharge, title = x.chargeServices[0].orderCharge })
-                        .ToList() ?? new List<object>();
+                    var feeResponse = await httpResponse.Content.ReadFromJsonAsync<DeliveryFeeResponse>();
+                    var totalAmount = feeResponse?.data?.total_amount ?? 0L;
+
+                    _logger.LogInformation("💰 Delivery fee resolved: {Amount}", totalAmount);
 
                     response = new
                     {
                         version = "3.0",
-                        screen = "screen_asnlyt",
+                        screen = "screen_igvcep",
                         data = new
                         {
-                            delivery_areas = deliveryAreas,
-                            status = "active"
+                            passed_address = address,
+                            passed_phone = phone,
+                            delivery_price = totalAmount.ToString()
                         }
                     };
                 }
                 else
                 {
-                    // fallback to previous behaviour: empty delivery areas
-                    var deliveryAreas = new List<object>();
+                    // default: load the address entry screen (screen 1)
                     response = new
                     {
                         version = "3.0",
                         screen = "screen_asnlyt",
-                        data = new
-                        {
-                            delivery_areas = deliveryAreas,
-                            status = "active"
-                        }
+                        data = new { }
                     };
                 }
 
@@ -169,6 +187,33 @@ namespace FusionComms.Controllers
         public class ChargeService
         {
             public string orderCharge { get; set; } = "";
+        }
+
+        // DTOs for delivery fee API
+        public sealed class DeliveryFeeRequest
+        {
+            public string source_address_string { get; set; } = "Panarotics";
+            public string destination_address_string { get; set; } = "";
+            public int estimated_order_amount { get; set; } = 0;
+            public Coordinate source_address { get; set; } = new Coordinate();
+            public Coordinate destination_address { get; set; } = new Coordinate();
+        }
+
+        public sealed class Coordinate
+        {
+            public double latitude { get; set; } = 0;
+            public double longitude { get; set; } = 0;
+        }
+
+        public sealed class DeliveryFeeResponse
+        {
+            public DeliveryFeeData data { get; set; } = new DeliveryFeeData();
+            public List<string> errors { get; set; } = new List<string>();
+        }
+
+        public sealed class DeliveryFeeData
+        {
+            public long total_amount { get; set; }
         }
 
         // Crypto helpers
