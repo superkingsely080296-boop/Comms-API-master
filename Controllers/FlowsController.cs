@@ -82,14 +82,21 @@ namespace FusionComms.Controllers
 
                 _logger.LogInformation("➡️ Flow action: {Action}, screen: {Screen}", action, screen);
 
-                if (string.Equals(action, "navigate", StringComparison.OrdinalIgnoreCase) && string.Equals(screen, "screen_igvcep", StringComparison.OrdinalIgnoreCase))
-                {
-                    // extract user-entered address and phone from the payload
-                    var data = doc2.RootElement.GetProperty("data");
-                    var address = data.TryGetProperty("passed_address", out var a) ? a.GetString() ?? string.Empty : string.Empty;
-                    var phone = data.TryGetProperty("passed_phone", out var p) ? p.GetString() ?? string.Empty : string.Empty;
+                // Consider navigate to screen_igvcep OR any navigate that carries passed_address
+                var canCalculateFee = false;
+                JsonElement dataElement = default;
+                if (doc2.RootElement.TryGetProperty("data", out var tmpData))
+                    dataElement = tmpData;
 
-                    _logger.LogInformation("📍 Calculating delivery fee for address: {Address}", address);
+                var hasAddress = dataElement.ValueKind == JsonValueKind.Object && dataElement.TryGetProperty("passed_address", out _);
+                if (string.Equals(action, "navigate", StringComparison.OrdinalIgnoreCase) && (string.Equals(screen, "screen_igvcep", StringComparison.OrdinalIgnoreCase) || hasAddress))
+                {
+                    // extract user-entered address and phone from the payload (if present)
+                    var data = dataElement.ValueKind == JsonValueKind.Object ? dataElement : new JsonElement();
+                    var address = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("passed_address", out var a) ? a.GetString() ?? string.Empty : string.Empty;
+                    var phone = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("passed_phone", out var p) ? p.GetString() ?? string.Empty : string.Empty;
+
+                    _logger.LogInformation("📍 Calculating delivery fee for address: {Address}; phone: {Phone}; screen: {Screen}", address, phone, screen);
 
                     var client = _httpClientFactory.CreateClient();
                     // Demo bearer token provided by user (remove or move to configuration in production)
